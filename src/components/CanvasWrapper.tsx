@@ -2,8 +2,11 @@
 
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { CanvasEngine } from '../lib/canvas/CanvasEngine';
-import { CanvasState } from '../lib/types/canvas';
+import { CanvasState, TextRegion } from '../lib/types/canvas';
 import { ClipboardManager, ClipboardImageData } from '../lib/clipboard/ClipboardManager';
+import { useOCR } from '../lib/ocr/useOCR';
+import { OCRProgressIndicator } from './OCRProgressIndicator';
+import { TextRegionManager } from './TextRegionManager';
 
 interface CanvasWrapperProps {
   className?: string;
@@ -11,6 +14,8 @@ interface CanvasWrapperProps {
   onError?: (error: Error) => void;
   onFileValidationError?: (error: string) => void;
   onClipboardPaste?: (success: boolean) => void;
+  enableOCR?: boolean;
+  onTextRegionsDetected?: (regions: TextRegion[]) => void;
 }
 
 // Export type for the ref
@@ -20,6 +25,8 @@ export interface CanvasWrapperRef {
   exportCanvas: () => Promise<Blob>;
   getPerformanceMetrics: () => any;
   getCanvasEngine: () => CanvasEngine | null;
+  detectTextRegions: () => Promise<TextRegion[]>;
+  getTextRegions: () => TextRegion[];
 }
 
 export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
@@ -28,6 +35,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
   onError,
   onFileValidationError,
   onClipboardPaste,
+  enableOCR = true,
+  onTextRegionsDetected,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasEngineRef = useRef<CanvasEngine | null>(null);
@@ -38,6 +47,10 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isPasteReady, setIsPasteReady] = useState(false);
   const [currentState, setCurrentState] = useState<CanvasState | null>(null);
+  const [detectedTextRegions, setDetectedTextRegions] = useState<TextRegion[]>([]);
+
+  // Initialize OCR hook
+  const [ocrState, ocrActions] = useOCR();
 
   // File validation constants
   const SUPPORTED_FORMATS = ['image/png', 'image/jpeg', 'image/jpg'];
@@ -119,7 +132,7 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     return { isValid: true };
   }, []);
 
-  // Load image method with validation
+  // Load image method with validation and OCR processing
   const loadImage = useCallback(async (imageData: HTMLImageElement | File | Blob | string) => {
     if (!canvasEngineRef.current) {
       throw new Error('Canvas not initialized');
@@ -157,13 +170,33 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
       // State change will be handled by the callback
       setCurrentState(state);
       onImageLoad?.(state);
+
+      // Automatically detect text regions if OCR is enabled
+      if (enableOCR && state.image.data) {
+        try {
+          console.log('Starting OCR processing...');
+          const textRegions = await ocrActions.detectText(state.image.data);
+          console.log('OCR processing completed. Found regions:', textRegions.length);
+          
+          // Add text regions to canvas state
+          textRegions.forEach(region => {
+            canvasEngineRef.current?.addTextRegion(region);
+          });
+          
+          setDetectedTextRegions(textRegions);
+          onTextRegionsDetected?.(textRegions);
+        } catch (ocrError) {
+          console.warn('OCR processing failed:', ocrError);
+          // Don't throw OCR errors, just log them
+        }
+      }
     } catch (error) {
       console.error('Failed to load image:', error);
       onError?.(error instanceof Error ? error : new Error('Image loading failed'));
     } finally {
       setIsLoading(false);
     }
-  }, [onImageLoad, onError, onFileValidationError, validateFile, validateBlob]);
+  }, [onImageLoad, onError, onFileValidationError, validateFile, validateBlob, enableOCR, ocrActions, onTextRegionsDetected]);
 
   // Clipboard event handlers
   const handleClipboardImagePaste = useCallback(async (imageData: ClipboardImageData) => {
@@ -285,6 +318,45 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     return canvasEngineRef.current.getPerformanceMetrics();
   }, []);
 
+  // Detect text regions manually
+  const detectTextRegions = useCallback(async (): Promise<TextRegion[]> => {
+    if (!canvasEngineRef.current || !currentState?.image.data) {
+      throw new Error('No image loaded');
+    }
+
+    try {
+      const textRegions = await ocrActions.detectText(currentState.image.data);
+      
+      // Add text regions to canvas state
+      textRegions.forEach(region => {
+        canvasEngineRef.current?.addTextRegion(region);
+      });
+      
+      setDetectedTextRegions(textRegions);
+      onTextRegionsDetected?.(textRegions);
+      return textRegions;
+    } catch (error) {
+      console.error('Manual OCR processing failed:', error);
+      throw error;
+    }
+  }, [currentState, ocrActions, onTextRegionsDetected]);
+
+  // Get current text regions
+  const getTextRegions = useCallback((): TextRegion[] => {
+    return detectedTextRegions;
+  }, [detectedTextRegions]);
+
+  // Handle text region updates
+  const handleTextRegionUpdate = useCallback((regionId: string, newText: string) => {
+    setDetectedTextRegions(prev => 
+      prev.map(region => 
+        region.id === regionId 
+          ? { ...region, editedText: newText }
+          : region
+      )
+    );
+  }, []);
+
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
     loadImage,
@@ -292,6 +364,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     exportCanvas,
     getPerformanceMetrics,
     getCanvasEngine: () => canvasEngineRef.current,
+    detectTextRegions,
+    getTextRegions,
   }));
 
   return (
@@ -308,6 +382,23 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+      />
+      
+      {/* Text Region Overlay */}
+      {currentState?.image.data && detectedTextRegions.length > 0 && (
+        <TextRegionManager
+          textRegions={detectedTextRegions}
+          onTextRegionUpdate={handleTextRegionUpdate}
+          isEnabled={true}
+          className="absolute inset-0"
+        />
+      )}
+      
+      {/* OCR Progress Indicator */}
+      <OCRProgressIndicator
+        progress={ocrState.progress}
+        isVisible={ocrState.isProcessing}
+        className="absolute top-4 right-4 z-50"
       />
       
       {/* Paste feedback overlay */}
@@ -349,13 +440,33 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
       )}
       
       {/* Loading overlay */}
-      {isLoading && (
+      {(isLoading || ocrState.isProcessing) && (
         <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
           <div className="bg-white px-4 py-2 rounded-lg shadow-lg">
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              <span className="text-sm font-medium">Loading image...</span>
+              <span className="text-sm font-medium">
+                {ocrState.isProcessing ? 'Processing text...' : 'Loading image...'}
+              </span>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* OCR Error Display */}
+      {ocrState.error && (
+        <div className="absolute top-4 left-4 bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm z-40">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full" />
+            <span className="text-sm text-red-700">
+              OCR Error: {ocrState.error}
+            </span>
+            <button
+              onClick={ocrActions.clearError}
+              className="text-red-500 hover:text-red-700 ml-2"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

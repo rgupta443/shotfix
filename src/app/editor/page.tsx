@@ -2,11 +2,12 @@
 
 import React, { useRef, useState } from 'react';
 import { CanvasWrapper, CanvasWrapperRef } from '../../components/CanvasWrapper';
-import { CanvasState } from '../../lib/types/canvas';
+import { CanvasState, TextRegion } from '../../lib/types/canvas';
 
 export default function EditorPage() {
   const canvasRef = useRef<CanvasWrapperRef>(null);
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null);
+  const [textRegions, setTextRegions] = useState<TextRegion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
@@ -16,6 +17,11 @@ export default function EditorPage() {
     setError(null);
     setValidationError(null);
     console.log('Image loaded:', state);
+  };
+
+  const handleTextRegionsDetected = (regions: TextRegion[]) => {
+    setTextRegions(regions);
+    console.log('Text regions detected:', regions);
   };
 
   const handleError = (error: Error) => {
@@ -70,6 +76,18 @@ export default function EditorPage() {
         URL.revokeObjectURL(url);
       } catch (error) {
         handleError(error instanceof Error ? error : new Error('Export failed'));
+      }
+    }
+  };
+
+  const handleDetectText = async () => {
+    if (canvasRef.current) {
+      try {
+        const regions = await canvasRef.current.detectTextRegions();
+        setTextRegions(regions);
+        console.log('Manual text detection completed:', regions);
+      } catch (error) {
+        handleError(error instanceof Error ? error : new Error('Text detection failed'));
       }
     }
   };
@@ -150,6 +168,12 @@ export default function EditorPage() {
               {canvasState?.image.data && (
                 <>
                   <button
+                    onClick={handleDetectText}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Detect Text
+                  </button>
+                  <button
                     onClick={handleResetView}
                     className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
                   >
@@ -200,6 +224,8 @@ export default function EditorPage() {
             onError={handleError}
             onFileValidationError={handleFileValidationError}
             onClipboardPaste={handleClipboardPaste}
+            enableOCR={true}
+            onTextRegionsDetected={handleTextRegionsDetected}
           />
           
           {!canvasState?.image.data && (
@@ -213,6 +239,7 @@ export default function EditorPage() {
                 <p>• Maximum file size: 50MB</p>
                 <p>• Maximum dimensions: 8000×8000 pixels</p>
                 <p>• For clipboard paste: Copy an image first, then click here and press Ctrl+V/Cmd+V</p>
+                <p>• Text regions will be automatically detected after image loads</p>
               </div>
             </div>
           )}
@@ -242,11 +269,40 @@ export default function EditorPage() {
                 </p>
               </div>
               <div>
-                <span className="font-medium text-gray-700">Snap Guides:</span>
+                <span className="font-medium text-gray-700">Text Regions:</span>
                 <p className="text-gray-600">
-                  {canvasState.ui.snapGuidesEnabled ? 'Enabled' : 'Disabled'}
+                  {textRegions.length} detected
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Text Regions Info */}
+        {textRegions.length > 0 && (
+          <div className="mt-6 bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-lg font-semibold mb-4">Detected Text Regions</h3>
+            <div className="space-y-3">
+              {textRegions.map((region, index) => (
+                <div key={region.id} className="border rounded-lg p-3 bg-gray-50">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-medium text-gray-700">Region {index + 1}</span>
+                    <span className="text-sm text-gray-500">
+                      {Math.round(region.confidence)}% confidence
+                    </span>
+                  </div>
+                  <p className="text-gray-800 mb-2">"{region.originalText}"</p>
+                  {region.editedText && (
+                    <p className="text-blue-600 text-sm">
+                      Edited: "{region.editedText}"
+                    </p>
+                  )}
+                  <div className="text-xs text-gray-500 mt-2">
+                    Position: ({region.bounds.x}, {region.bounds.y}) 
+                    Size: {region.bounds.width}×{region.bounds.height}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
