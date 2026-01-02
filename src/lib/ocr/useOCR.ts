@@ -1,6 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
-import { OCREngine, OCRProgress, getOCREngine } from './OCREngine';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { OCRManager } from './OCRManager';
+import { OCRProgress, OCRConfig } from './types';
 import { TextRegion } from '../types/canvas';
+import { DEFAULT_OCR_PROVIDER } from './config';
 
 export interface OCRState {
   isProcessing: boolean;
@@ -8,74 +10,144 @@ export interface OCRState {
   textRegions: TextRegion[];
   error: string | null;
   isInitialized: boolean;
+  currentProvider: string | null;
+  availableProviders: string[];
 }
 
 export interface OCRActions {
-  detectText: (imageData: HTMLImageElement | HTMLCanvasElement | string) => Promise<TextRegion[]>;
-  initialize: () => Promise<void>;
+  detectText: (imageData: HTMLImageElement | HTMLCanvasElement | string | Blob, config?: OCRConfig) => Promise<TextRegion[]>;
+  initialize: (provider?: string, config?: OCRConfig) => Promise<void>;
+  switchProvider: (provider: string, config?: OCRConfig) => Promise<void>;
   setLanguage: (language: string) => Promise<void>;
+  updateConfig: (config: OCRConfig) => Promise<void>;
   clearError: () => void;
   reset: () => void;
+  getProviderInfo: (provider?: string) => any;
 }
 
-export const useOCR = (): [OCRState, OCRActions] => {
+export const useOCR = (defaultProvider: string = DEFAULT_OCR_PROVIDER): [OCRState, OCRActions] => {
   const [state, setState] = useState<OCRState>({
     isProcessing: false,
     progress: null,
     textRegions: [],
     error: null,
-    isInitialized: false
+    isInitialized: false,
+    currentProvider: null,
+    availableProviders: []
   });
 
-  const ocrEngineRef = useRef<OCREngine | null>(null);
+  const ocrManagerRef = useRef<OCRManager | null>(null);
 
-  // Initialize OCR engine with progress callback
-  const getEngine = useCallback(() => {
-    if (!ocrEngineRef.current) {
-      ocrEngineRef.current = getOCREngine((progress: OCRProgress) => {
+  // Initialize OCR manager
+  const getManager = useCallback(() => {
+    if (!ocrManagerRef.current) {
+      ocrManagerRef.current = OCRManager.getInstance();
+      
+      // Set up progress callback
+      ocrManagerRef.current.setProgressCallback((progress: OCRProgress) => {
         setState(prev => ({
           ...prev,
           progress
         }));
       });
+
+      // Get available providers
+      const availableProviders = ocrManagerRef.current.getAvailableProviders();
+      setState(prev => ({
+        ...prev,
+        availableProviders
+      }));
     }
-    return ocrEngineRef.current;
+    return ocrManagerRef.current;
   }, []);
 
-  const initialize = useCallback(async () => {
+  // Initialize with default provider on first use
+  useEffect(() => {
+    const manager = getManager();
+    if (!manager.isInitialized() && defaultProvider) {
+      initialize(defaultProvider).catch(error => {
+        console.warn('Failed to auto-initialize OCR:', error);
+      });
+    }
+  }, [defaultProvider]);
+
+  const initialize = useCallback(async (provider: string = defaultProvider, config?: OCRConfig) => {
     try {
       setState(prev => ({ ...prev, isProcessing: true, error: null }));
       
-      const engine = getEngine();
-      await engine.initialize();
+      const manager = getManager();
+      await manager.initialize(provider, config);
       
       setState(prev => ({
         ...prev,
         isInitialized: true,
         isProcessing: false,
-        progress: null
+        progress: null,
+        currentProvider: provider
       }));
     } catch (error) {
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to initialize OCR',
         isProcessing: false,
+        progress: null,
+        isInitialized: false,
+        currentProvider: null
+      }));
+      throw error;
+    }
+  }, [defaultProvider, getManager]);
+
+  const switchProvider = useCallback(async (provider: string, config?: OCRConfig) => {
+    try {
+      setState(prev => ({ ...prev, isProcessing: true, error: null }));
+      
+      const manager = getManager();
+      await manager.switchProvider(provider, config);
+      
+      setState(prev => ({
+        ...prev,
+        isInitialized: true,
+        isProcessing: false,
+        progress: null,
+        currentProvider: provider
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to switch OCR provider',
+        isProcessing: false,
         progress: null
       }));
+      throw error;
     }
-  }, [getEngine]);
+  }, [getManager]);
 
-  const detectText = useCallback(async (imageData: HTMLImageElement | HTMLCanvasElement | string): Promise<TextRegion[]> => {
+  const detectText = useCallback(async (
+    imageData: HTMLImageElement | HTMLCanvasElement | string | Blob,
+    config?: OCRConfig
+  ): Promise<TextRegion[]> => {
     try {
       setState(prev => ({ 
         ...prev, 
         isProcessing: true, 
         error: null,
-        progress: { status: 'recognizing text', progress: 0 }
+        progress: { status: 'starting', progress: 0 }
       }));
 
-      const engine = getEngine();
-      const textRegions = await engine.detectText(imageData);
+      const manager = getManager();
+      
+      // Auto-initialize with default provider if not initialized
+      if (!manager.isInitialized()) {
+        await manager.initialize(defaultProvider);
+        setState(prev => ({
+          ...prev,
+          isInitialized: true,
+          currentProvider: defaultProvider
+        }));
+      }
+
+      const textRegions = await manager.detectText(imageData, config);
 
       setState(prev => ({
         ...prev,
@@ -96,14 +168,14 @@ export const useOCR = (): [OCRState, OCRActions] => {
       }));
       throw error;
     }
-  }, [getEngine]);
+  }, [getManager, defaultProvider]);
 
   const setLanguage = useCallback(async (language: string) => {
     try {
       setState(prev => ({ ...prev, isProcessing: true, error: null }));
       
-      const engine = getEngine();
-      await engine.setLanguage(language);
+      const manager = getManager();
+      await manager.setLanguage(language);
       
       setState(prev => ({ ...prev, isProcessing: false }));
     } catch (error) {
@@ -112,31 +184,58 @@ export const useOCR = (): [OCRState, OCRActions] => {
         error: error instanceof Error ? error.message : 'Failed to set language',
         isProcessing: false
       }));
+      throw error;
     }
-  }, [getEngine]);
+  }, [getManager]);
+
+  const updateConfig = useCallback(async (config: OCRConfig) => {
+    try {
+      setState(prev => ({ ...prev, isProcessing: true, error: null }));
+      
+      const manager = getManager();
+      await manager.updateConfig(config);
+      
+      setState(prev => ({ ...prev, isProcessing: false }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update config',
+        isProcessing: false
+      }));
+      throw error;
+    }
+  }, [getManager]);
 
   const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
   const reset = useCallback(() => {
-    setState({
+    setState(prev => ({
+      ...prev,
       isProcessing: false,
       progress: null,
       textRegions: [],
-      error: null,
-      isInitialized: false
-    });
+      error: null
+    }));
   }, []);
+
+  const getProviderInfo = useCallback((provider?: string) => {
+    const manager = getManager();
+    return manager.getProviderInfo(provider);
+  }, [getManager]);
 
   return [
     state,
     {
       detectText,
       initialize,
+      switchProvider,
       setLanguage,
+      updateConfig,
       clearError,
-      reset
+      reset,
+      getProviderInfo
     }
   ];
 };

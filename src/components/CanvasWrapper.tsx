@@ -7,6 +7,7 @@ import { ClipboardManager, ClipboardImageData } from '../lib/clipboard/Clipboard
 import { useOCR } from '../lib/ocr/useOCR';
 import { OCRProgressIndicator } from './OCRProgressIndicator';
 import { TextRegionManager } from './TextRegionManager';
+import { DEFAULT_OCR_PROVIDER } from '../lib/ocr/config';
 
 interface CanvasWrapperProps {
   className?: string;
@@ -15,6 +16,8 @@ interface CanvasWrapperProps {
   onFileValidationError?: (error: string) => void;
   onClipboardPaste?: (success: boolean) => void;
   enableOCR?: boolean;
+  ocrProvider?: string;
+  ocrConfig?: any;
   onTextRegionsDetected?: (regions: TextRegion[]) => void;
 }
 
@@ -36,6 +39,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
   onFileValidationError,
   onClipboardPaste,
   enableOCR = true,
+  ocrProvider = DEFAULT_OCR_PROVIDER,
+  ocrConfig,
   onTextRegionsDetected,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,8 +54,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
   const [currentState, setCurrentState] = useState<CanvasState | null>(null);
   const [detectedTextRegions, setDetectedTextRegions] = useState<TextRegion[]>([]);
 
-  // Initialize OCR hook
-  const [ocrState, ocrActions] = useOCR();
+  // Initialize OCR hook with specified provider
+  const [ocrState, ocrActions] = useOCR(ocrProvider);
 
   // File validation constants
   const SUPPORTED_FORMATS = ['image/png', 'image/jpeg', 'image/jpg'];
@@ -174,8 +179,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
       // Automatically detect text regions if OCR is enabled
       if (enableOCR && state.image.data) {
         try {
-          console.log('Starting OCR processing...');
-          const textRegions = await ocrActions.detectText(state.image.data);
+          console.log(`Starting OCR processing with provider: ${ocrProvider}...`);
+          const textRegions = await ocrActions.detectText(state.image.data, ocrConfig);
           console.log('OCR processing completed. Found regions:', textRegions.length);
           
           // Add text regions to canvas state
@@ -325,7 +330,7 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     }
 
     try {
-      const textRegions = await ocrActions.detectText(currentState.image.data);
+      const textRegions = await ocrActions.detectText(currentState.image.data, ocrConfig);
       
       // Add text regions to canvas state
       textRegions.forEach(region => {

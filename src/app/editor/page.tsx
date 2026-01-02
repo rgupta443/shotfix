@@ -3,11 +3,14 @@
 import React, { useRef, useState } from 'react';
 import { CanvasWrapper, CanvasWrapperRef } from '../../components/CanvasWrapper';
 import { CanvasState, TextRegion } from '../../lib/types/canvas';
+import { DEFAULT_OCR_PROVIDER } from '../../lib/ocr/config';
+
 
 export default function EditorPage() {
   const canvasRef = useRef<CanvasWrapperRef>(null);
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null);
   const [textRegions, setTextRegions] = useState<TextRegion[]>([]);
+  const [currentOCRProvider] = useState<string>(DEFAULT_OCR_PROVIDER); // Configured in config.ts
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
@@ -225,6 +228,7 @@ export default function EditorPage() {
             onFileValidationError={handleFileValidationError}
             onClipboardPaste={handleClipboardPaste}
             enableOCR={true}
+            ocrProvider={currentOCRProvider}
             onTextRegionsDetected={handleTextRegionsDetected}
           />
           
