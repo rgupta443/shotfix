@@ -1,0 +1,44 @@
+{
+  "name": "shotfix",
+  "version": "1.0.0",
+  "description": "A web application that enables fast, intuitive editing of screenshots with AI-assisted text detection and UI-aware editing capabilities. Edit screenshots like they were real UI - paste, edit, and share in under 60 seconds.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rgupta443/shotfix.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rgupta443/shotfix/issues"
+  },
+  "homepage": "https://github.com/rgupta443/shotfix#readme",
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.1",
+    "konva": "^10.0.12",
+    "lucide-react": "^0.562.0",
+    "next": "^16.1.1",
+    "postcss": "^8.5.6",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-konva": "^19.2.1",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.1.18",
+    "tesseract.js": "^7.0.0",
+    "typescript": "^5.9.3"
+  }
+}
