@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Star, Zap } from 'lucide-react'
+import { Check, Star, Zap, Crown, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 const plans = [
@@ -20,7 +20,8 @@ const plans = [
     cta: 'Get Started Free',
     ctaLink: '/editor',
     popular: false,
-    buttonStyle: 'bg-gray-900 hover:bg-gray-800 text-white'
+    buttonStyle: 'bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-900 hover:to-black text-white shadow-xl hover:shadow-2xl',
+    cardStyle: 'border-gray-200 bg-white'
   },
   {
     name: 'Pro',
@@ -40,73 +41,96 @@ const plans = [
     cta: 'Start Pro Trial',
     ctaLink: '/signup?plan=pro',
     popular: true,
-    buttonStyle: 'bg-blue-600 hover:bg-blue-700 text-white'
+    buttonStyle: 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-xl hover:shadow-2xl',
+    cardStyle: 'border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50'
   }
 ]
 
 export default function Pricing() {
   return (
-    <section className="py-20 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-24 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
+      {/* Background decorations */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-0 w-72 h-72 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl transform -translate-x-1/2"></div>
+        <div className="absolute bottom-1/4 right-0 w-72 h-72 bg-gradient-to-br from-purple-400/20 to-pink-600/20 rounded-full blur-3xl transform translate-x-1/2"></div>
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Simple, Transparent Pricing
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-green-100 to-blue-100 text-green-700 text-sm font-semibold mb-6">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Simple Pricing
+          </div>
+          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-gray-900 mb-6 leading-tight">
+            Choose Your{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+              Perfect Plan
+            </span>
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Start free and upgrade when you need more. No hidden fees, no complex tiers.
+            Just powerful screenshot editing at your fingertips.
           </p>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto mb-20">
           {plans.map((plan, index) => (
             <div 
               key={index}
-              className={`relative rounded-2xl border-2 p-8 bg-white shadow-lg ${
-                plan.popular 
-                  ? 'border-blue-500 shadow-blue-100' 
-                  : 'border-gray-200'
+              className={`relative rounded-3xl border-2 p-8 lg:p-10 shadow-xl hover:shadow-2xl transition-all duration-500 hover:scale-[1.02] ${plan.cardStyle} ${
+                plan.popular ? 'transform scale-105 lg:scale-110' : ''
               }`}
             >
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium">
-                    <Star className="w-4 h-4 mr-1" />
+                <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
+                  <div className="inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-bold shadow-lg">
+                    <Crown className="w-4 h-4 mr-2" />
                     Most Popular
+                    <div className="ml-2 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                   </div>
                 </div>
               )}
 
               <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  {plan.name}
-                </h3>
-                <div className="mb-4">
-                  <span className="text-4xl font-bold text-gray-900">
+                <div className="flex items-center justify-center mb-4">
+                  <h3 className="text-3xl font-black text-gray-900">
+                    {plan.name}
+                  </h3>
+                  {plan.popular && (
+                    <div className="ml-3 p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full">
+                      <Star className="w-4 h-4 text-white fill-current" />
+                    </div>
+                  )}
+                </div>
+                <div className="mb-6">
+                  <span className="text-5xl lg:text-6xl font-black text-gray-900">
                     {plan.price}
                   </span>
-                  <span className="text-gray-600 ml-2">
+                  <span className="text-gray-600 ml-2 text-lg">
                     {plan.period}
                   </span>
                 </div>
-                <p className="text-gray-600">
+                <p className="text-gray-600 text-lg">
                   {plan.description}
                 </p>
               </div>
 
-              <ul className="space-y-4 mb-8">
+              <ul className="space-y-5 mb-10">
                 {plan.features.map((feature, featureIndex) => (
                   <li key={featureIndex} className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700">{feature}</span>
+                    <div className="flex-shrink-0 w-6 h-6 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mr-4 mt-0.5">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-gray-700 text-lg leading-relaxed">{feature}</span>
                   </li>
                 ))}
               </ul>
 
               <Link 
                 href={plan.ctaLink}
-                className={`block w-full text-center px-6 py-3 rounded-lg font-semibold transition-colors duration-200 ${plan.buttonStyle}`}
+                className={`block w-full text-center px-8 py-5 rounded-2xl font-bold transition-all duration-300 hover:scale-105 text-lg ${plan.buttonStyle}`}
               >
                 {plan.cta}
               </Link>
@@ -115,43 +139,43 @@ export default function Pricing() {
         </div>
 
         {/* FAQ Section */}
-        <div className="mt-20 text-center">
-          <h3 className="text-2xl font-bold text-gray-900 mb-8">
-            Frequently Asked Questions
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto text-left">
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">
-                What happens to my images?
-              </h4>
-              <p className="text-gray-600">
-                All processing happens in your browser. Images are never uploaded to our servers unless you choose to save them to your account.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">
-                Can I cancel anytime?
-              </h4>
-              <p className="text-gray-600">
-                Yes, you can cancel your Pro subscription at any time. You'll continue to have Pro access until the end of your billing period.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">
-                Is there a free trial?
-              </h4>
-              <p className="text-gray-600">
-                Yes! The Free plan lets you try all features with 3 exports per day. Pro users get a 7-day free trial.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">
-                What file formats are supported?
-              </h4>
-              <p className="text-gray-600">
-                We support PNG and JPG input formats. Exports are always high-quality PNG files with transparency support.
-              </p>
-            </div>
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 lg:p-12 border border-white/50 shadow-xl">
+          <div className="text-center mb-12">
+            <h3 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4">
+              Frequently Asked Questions
+            </h3>
+            <p className="text-lg text-gray-600">
+              Everything you need to know about ShotFix
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {[
+              {
+                question: "What happens to my images?",
+                answer: "All processing happens in your browser. Images are never uploaded to our servers unless you choose to save them to your account."
+              },
+              {
+                question: "Can I cancel anytime?",
+                answer: "Yes, you can cancel your Pro subscription at any time. You'll continue to have Pro access until the end of your billing period."
+              },
+              {
+                question: "Is there a free trial?",
+                answer: "Yes! The Free plan lets you try all features with 3 exports per day. Pro users get a 7-day free trial."
+              },
+              {
+                question: "What file formats are supported?",
+                answer: "We support PNG and JPG input formats. Exports are always high-quality PNG files with transparency support."
+              }
+            ].map((faq, index) => (
+              <div key={index} className="group p-6 rounded-2xl bg-gradient-to-br from-gray-50 to-white border border-gray-200/50 hover:border-gray-300/50 hover:shadow-lg transition-all duration-300">
+                <h4 className="font-bold text-gray-900 mb-3 text-lg group-hover:text-blue-600 transition-colors duration-200">
+                  {faq.question}
+                </h4>
+                <p className="text-gray-600 leading-relaxed">
+                  {faq.answer}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
