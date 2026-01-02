@@ -9,6 +9,7 @@ export default function EditorPage() {
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
 
   const handleImageLoad = (state: CanvasState) => {
     setCanvasState(state);
@@ -25,6 +26,19 @@ export default function EditorPage() {
   const handleFileValidationError = (error: string) => {
     setValidationError(error);
     console.error('File validation error:', error);
+  };
+
+  const handleClipboardPaste = (success: boolean) => {
+    if (success) {
+      setClipboardMessage('Image pasted successfully from clipboard!');
+      setError(null);
+      setValidationError(null);
+    } else {
+      setClipboardMessage('Failed to paste image from clipboard');
+    }
+    
+    // Clear clipboard message after 3 seconds
+    setTimeout(() => setClipboardMessage(null), 3000);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,6 +70,38 @@ export default function EditorPage() {
         URL.revokeObjectURL(url);
       } catch (error) {
         handleError(error instanceof Error ? error : new Error('Export failed'));
+      }
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    if (canvasRef.current) {
+      try {
+        // Try to read clipboard manually
+        if (navigator.clipboard && navigator.clipboard.read) {
+          const clipboardItems = await navigator.clipboard.read();
+          
+          for (const clipboardItem of clipboardItems) {
+            for (const type of clipboardItem.types) {
+              if (type.startsWith('image/')) {
+                const blob = await clipboardItem.getType(type);
+                await canvasRef.current.loadImage(blob);
+                handleClipboardPaste(true);
+                return;
+              }
+            }
+          }
+          
+          setClipboardMessage('No image found in clipboard');
+          setTimeout(() => setClipboardMessage(null), 3000);
+        } else {
+          setClipboardMessage('Clipboard API not supported. Try Ctrl+V instead.');
+          setTimeout(() => setClipboardMessage(null), 3000);
+        }
+      } catch (error) {
+        console.error('Manual clipboard read failed:', error);
+        setClipboardMessage('Failed to read clipboard. Try Ctrl+V instead.');
+        setTimeout(() => setClipboardMessage(null), 3000);
       }
     }
   };
@@ -93,6 +139,14 @@ export default function EditorPage() {
                 Upload Image
               </label>
               
+              <button
+                onClick={handlePasteFromClipboard}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                title="Paste image from clipboard"
+              >
+                Paste from Clipboard
+              </button>
+              
               {canvasState?.image.data && (
                 <>
                   <button
@@ -116,6 +170,13 @@ export default function EditorPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {clipboardMessage && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-blue-800 font-medium">Clipboard:</p>
+            <p className="text-blue-600">{clipboardMessage}</p>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-800 font-medium">Error:</p>
@@ -138,18 +199,20 @@ export default function EditorPage() {
             onImageLoad={handleImageLoad}
             onError={handleError}
             onFileValidationError={handleFileValidationError}
+            onClipboardPaste={handleClipboardPaste}
           />
           
           {!canvasState?.image.data && (
             <div className="mt-4 text-center text-gray-500">
               <p className="text-lg font-medium mb-2">No image loaded</p>
               <p className="text-sm mb-2">
-                Upload an image using the button above or drag and drop a PNG/JPG file
+                Upload an image using the button above, drag and drop a PNG/JPG file, or paste from clipboard (Ctrl+V / Cmd+V)
               </p>
               <div className="text-xs text-gray-400 space-y-1">
                 <p>• Supported formats: PNG, JPG, JPEG</p>
                 <p>• Maximum file size: 50MB</p>
                 <p>• Maximum dimensions: 8000×8000 pixels</p>
+                <p>• For clipboard paste: Copy an image first, then click here and press Ctrl+V/Cmd+V</p>
               </div>
             </div>
           )}

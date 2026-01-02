@@ -61,7 +61,7 @@ export class CanvasEngine {
   /**
    * Load an image onto the canvas
    */
-  public async loadImage(imageData: HTMLImageElement | File | string): Promise<void> {
+  public async loadImage(imageData: HTMLImageElement | File | Blob | string): Promise<void> {
     const startTime = performance.now();
     
     try {
@@ -71,6 +71,8 @@ export class CanvasEngine {
         imageElement = imageData;
       } else if (imageData instanceof File) {
         imageElement = await this.fileToImage(imageData);
+      } else if (imageData instanceof Blob) {
+        imageElement = await this.blobToImage(imageData);
       } else if (typeof imageData === 'string') {
         imageElement = await this.urlToImage(imageData);
       } else {
@@ -274,6 +276,35 @@ export class CanvasEngine {
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Convert Blob to HTMLImageElement
+   */
+  private blobToImage(blob: Blob): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      if (!blob.type.startsWith('image/')) {
+        reject(new Error('Blob is not an image'));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Clean up the object URL to prevent memory leaks
+          URL.revokeObjectURL(img.src);
+          resolve(img);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(img.src);
+          reject(new Error('Failed to load image from blob'));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read blob'));
+      reader.readAsDataURL(blob);
     });
   }
 

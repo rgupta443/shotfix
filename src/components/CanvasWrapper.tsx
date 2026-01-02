@@ -3,17 +3,19 @@
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { CanvasEngine } from '../lib/canvas/CanvasEngine';
 import { CanvasState } from '../lib/types/canvas';
+import { ClipboardManager, ClipboardImageData } from '../lib/clipboard/ClipboardManager';
 
 interface CanvasWrapperProps {
   className?: string;
   onImageLoad?: (state: CanvasState) => void;
   onError?: (error: Error) => void;
   onFileValidationError?: (error: string) => void;
+  onClipboardPaste?: (success: boolean) => void;
 }
 
 // Export type for the ref
 export interface CanvasWrapperRef {
-  loadImage: (imageData: HTMLImageElement | File | string) => Promise<void>;
+  loadImage: (imageData: HTMLImageElement | File | Blob | string) => Promise<void>;
   resetView: () => void;
   exportCanvas: () => Promise<Blob>;
   getPerformanceMetrics: () => any;
@@ -25,13 +27,16 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
   onImageLoad,
   onError,
   onFileValidationError,
+  onClipboardPaste,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasEngineRef = useRef<CanvasEngine | null>(null);
+  const clipboardManagerRef = useRef<ClipboardManager | null>(null);
   const onImageLoadRef = useRef(onImageLoad);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isPasteReady, setIsPasteReady] = useState(false);
   const [currentState, setCurrentState] = useState<CanvasState | null>(null);
 
   // File validation constants
@@ -93,8 +98,29 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     return { isValid: true };
   }, []);
 
+  // Blob validation function (for clipboard images)
+  const validateBlob = useCallback((blob: Blob): { isValid: boolean; error?: string } => {
+    // Check blob type
+    if (!SUPPORTED_FORMATS.includes(blob.type)) {
+      return {
+        isValid: false,
+        error: `Unsupported image format from clipboard. Received: ${blob.type || 'unknown'}`
+      };
+    }
+
+    // Check blob size
+    if (blob.size > MAX_FILE_SIZE) {
+      return {
+        isValid: false,
+        error: `Clipboard image too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB. Size: ${Math.round(blob.size / 1024 / 1024 * 100) / 100}MB`
+      };
+    }
+
+    return { isValid: true };
+  }, []);
+
   // Load image method with validation
-  const loadImage = useCallback(async (imageData: HTMLImageElement | File | string) => {
+  const loadImage = useCallback(async (imageData: HTMLImageElement | File | Blob | string) => {
     if (!canvasEngineRef.current) {
       throw new Error('Canvas not initialized');
     }
@@ -102,6 +128,15 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     // Validate file if it's a File object
     if (imageData instanceof File) {
       const validation = validateFile(imageData);
+      if (!validation.isValid) {
+        onFileValidationError?.(validation.error!);
+        return;
+      }
+    }
+
+    // Validate blob if it's a Blob object (from clipboard)
+    if (imageData instanceof Blob) {
+      const validation = validateBlob(imageData);
       if (!validation.isValid) {
         onFileValidationError?.(validation.error!);
         return;
@@ -128,7 +163,59 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
     } finally {
       setIsLoading(false);
     }
-  }, [onImageLoad, onError, onFileValidationError, validateFile]);
+  }, [onImageLoad, onError, onFileValidationError, validateFile, validateBlob]);
+
+  // Clipboard event handlers
+  const handleClipboardImagePaste = useCallback(async (imageData: ClipboardImageData) => {
+    try {
+      console.log('Clipboard image paste detected:', imageData);
+      setIsPasteReady(false);
+      await loadImage(imageData.blob);
+      onClipboardPaste?.(true);
+    } catch (error) {
+      console.error('Failed to load pasted image:', error);
+      onError?.(error instanceof Error ? error : new Error('Failed to load pasted image'));
+      onClipboardPaste?.(false);
+    }
+  }, [onError, onClipboardPaste, loadImage]);
+
+  const handleClipboardError = useCallback((error: Error) => {
+    console.warn('Clipboard operation failed:', error);
+    setIsPasteReady(false);
+    // Don't propagate clipboard errors as they're often due to no image in clipboard
+    // onError?.(error);
+  }, []);
+
+  const handlePasteAttempt = useCallback(() => {
+    console.log('Paste attempt detected');
+    setIsPasteReady(true);
+    // Reset the paste ready state after a short delay
+    setTimeout(() => setIsPasteReady(false), 2000);
+  }, []);
+
+  // Initialize clipboard manager
+  useEffect(() => {
+    if (!clipboardManagerRef.current) {
+      console.log('CanvasWrapper: Initializing clipboard manager');
+      clipboardManagerRef.current = new ClipboardManager({
+        onImagePaste: handleClipboardImagePaste,
+        onError: handleClipboardError,
+        onPasteAttempt: handlePasteAttempt,
+      });
+      
+      clipboardManagerRef.current.startListening();
+      console.log('CanvasWrapper: Clipboard manager started listening');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (clipboardManagerRef.current) {
+        console.log('CanvasWrapper: Destroying clipboard manager');
+        clipboardManagerRef.current.destroy();
+        clipboardManagerRef.current = null;
+      }
+    };
+  }, [handleClipboardImagePaste, handleClipboardError, handlePasteAttempt]);
 
   // Drag and drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -222,6 +309,25 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       />
+      
+      {/* Paste feedback overlay */}
+      {isPasteReady && (
+        <div className="absolute inset-0 bg-green-500 bg-opacity-20 flex items-center justify-center rounded-lg pointer-events-none">
+          <div className="bg-white px-6 py-4 rounded-lg shadow-lg border-2 border-green-500">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 border-2 border-green-500 border-dashed rounded-full flex items-center justify-center">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-green-700">Paste detected</p>
+                <p className="text-sm text-green-600">Processing clipboard image...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Drag overlay */}
       {isDragOver && (
