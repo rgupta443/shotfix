@@ -7,6 +7,7 @@ export class CanvasEngine {
   private imageNode: Konva.Image | null = null;
   private container: HTMLDivElement | null = null;
   private canvasState: CanvasState;
+  private onStateChange?: (state: CanvasState) => void;
   
   // Performance tracking
   private performanceMetrics = {
@@ -14,7 +15,8 @@ export class CanvasEngine {
     renderTime: 0,
   };
 
-  constructor() {
+  constructor(onStateChange?: (state: CanvasState) => void) {
+    this.onStateChange = onStateChange;
     this.canvasState = {
       image: {
         data: null,
@@ -112,6 +114,15 @@ export class CanvasEngine {
   }
 
   /**
+   * Notify parent component of state changes
+   */
+  private notifyStateChange(): void {
+    if (this.onStateChange) {
+      this.onStateChange({ ...this.canvasState });
+    }
+  }
+
+  /**
    * Set up zoom and pan functionality
    */
   private setupZoomAndPan(): void {
@@ -150,6 +161,9 @@ export class CanvasEngine {
       this.canvasState.ui.zoomLevel = clampedScale;
       this.canvasState.ui.panOffset = newPos;
       
+      // Notify parent component of state change
+      this.notifyStateChange();
+      
       this.layer?.batchDraw();
     });
 
@@ -158,6 +172,9 @@ export class CanvasEngine {
       if (e.target === this.imageNode) {
         const pos = this.imageNode!.position();
         this.canvasState.ui.panOffset = pos;
+        
+        // Notify parent component of state change
+        this.notifyStateChange();
       }
     });
   }

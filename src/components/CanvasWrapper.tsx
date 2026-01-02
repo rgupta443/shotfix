@@ -28,20 +28,33 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasEngineRef = useRef<CanvasEngine | null>(null);
+  const onImageLoadRef = useRef(onImageLoad);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [currentState, setCurrentState] = useState<CanvasState | null>(null);
 
   // File validation constants
   const SUPPORTED_FORMATS = ['image/png', 'image/jpeg', 'image/jpg'];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   const MAX_DIMENSIONS = { width: 8000, height: 8000 };
 
+  // Update ref when callback changes
+  useEffect(() => {
+    onImageLoadRef.current = onImageLoad;
+  }, [onImageLoad]);
+
+  // Handle canvas state changes
+  const handleStateChange = useCallback((state: CanvasState) => {
+    setCurrentState(state);
+    onImageLoadRef.current?.(state);
+  }, []);
+
   // Initialize canvas engine
   useEffect(() => {
     if (containerRef.current && !canvasEngineRef.current) {
       try {
-        canvasEngineRef.current = new CanvasEngine();
+        canvasEngineRef.current = new CanvasEngine(handleStateChange);
         canvasEngineRef.current.initialize(containerRef.current);
         setIsInitialized(true);
       } catch (error) {
@@ -106,6 +119,8 @@ export const CanvasWrapper = forwardRef<CanvasWrapperRef, CanvasWrapperProps>(({
         throw new Error(`Image dimensions too large. Maximum: ${MAX_DIMENSIONS.width}x${MAX_DIMENSIONS.height}, Received: ${state.image.dimensions.width}x${state.image.dimensions.height}`);
       }
       
+      // State change will be handled by the callback
+      setCurrentState(state);
       onImageLoad?.(state);
     } catch (error) {
       console.error('Failed to load image:', error);
